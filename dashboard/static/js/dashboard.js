@@ -6,6 +6,7 @@ let isPaused = false, startTime = null, uptimeTimer = null;
 let allAlerts = [];          // full alert log
 let patternCounts = {FAN_OUT:0, FAN_IN:0, SCATTER_GATHER:0, VELOCITY_ABUSE:0};
 let txnFeedCount = 0;
+let currentAlert = null;
 const MAX_TXN_ROWS = 40;
 const MAX_DETECT_ROWS = 50;
 
@@ -16,6 +17,7 @@ function switchPage(name, btn) {
   document.getElementById('page-' + name).classList.add('active');
   btn.classList.add('active');
   if (name === 'graph') GraphVis.resize();
+  if (name === 'geomap' && window.GeoMap) window.GeoMap.resize();
 }
 
 // ── WebSocket ──────────────────────────────────────────────────────────────────
@@ -51,6 +53,7 @@ function route(msg) {
       if (msg.graph) GraphVis.update(msg.graph);
       if (msg.metrics) updateMetrics(msg.metrics);
       appendTxn(msg);
+      if (window.GeoMap) window.GeoMap.updateTxn(msg);
       break;
     case 'fraud_alert':
       if (msg.alert) { ingestAlert(msg.alert); }
@@ -155,6 +158,11 @@ function ingestAlert(a) {
   const flagged  = allAlerts.filter(x => x.verdict === 'FLAG').length;
   setText('gs-blocked', blocked);
   setText('gs-flagged',  flagged);
+  
+  // Flash geomap if available
+  if (window.GeoMap && a.accounts) {
+    window.GeoMap.flashAlert(a.accounts);
+  }
 }
 
 function addDetectionRow(a) {
@@ -374,6 +382,13 @@ function patClass(p) {
 // Fix: showAlert called from inline onclick with JSON string
 window.showAlert = function(a) {
   if (typeof a === 'string') { try { a = JSON.parse(a); } catch(_) { return; } }
+  currentAlert = a;
+  
+  // Reset AI container
+  document.getElementById('ai-sar-container').style.display = 'none';
+  document.getElementById('ai-sar-text').textContent = '';
+  document.getElementById('btn-ai-sar').disabled = false;
+  
   const overlay = document.getElementById('modal-overlay');
   document.getElementById('modal-tag').textContent  = a.verdict;
   document.getElementById('modal-tag').className    = 'modal-tag ' + a.verdict;
@@ -401,6 +416,46 @@ window.showAlert = function(a) {
     </div>`;
   overlay.classList.add('open');
 };
+
+async function generateSAR() {
+  if (!currentAlert) return;
+  const btn = document.getElementById('btn-ai-sar');
+  const container = document.getElementById('ai-sar-container');
+  const textDiv = document.getElementById('ai-sar-text');
+  
+  btn.disabled = true;
+  container.style.display = 'block';
+  textDiv.textContent = 'Initializing FIU-IND AI Investigator...\n';
+  
+  try {
+    const res = await fetch('/api/ai/generate-sar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pattern: currentAlert.pattern,
+        risk_score: currentAlert.score || 0,
+        implicated_accounts: currentAlert.accounts || [],
+        cypher_query: currentAlert.explanation_cypher || 'MATCH (n) RETURN n'
+      })
+    });
+    
+    if (!res.ok) throw new Error('Failed to generate report');
+    
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    textDiv.textContent = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      textDiv.textContent += decoder.decode(value, {stream: true});
+      textDiv.scrollTop = textDiv.scrollHeight;
+    }
+  } catch (err) {
+    textDiv.textContent += '\n\nError: Could not connect to AI engine.';
+    btn.disabled = false;
+  }
+}
 
 function clearNodeDetail() { document.getElementById('node-detail-card').style.display = 'none'; }
 

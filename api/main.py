@@ -138,10 +138,11 @@ app.add_middleware(
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 
-from api.routers import control, stream  # noqa: E402 (after app creation to avoid circular)
+from api.routers import control, stream, ai  # noqa: E402 (after app creation to avoid circular)
 
 app.include_router(control.router)
 app.include_router(stream.router)
+app.include_router(ai.router)
 
 # ─── Static Files (Dashboard) ─────────────────────────────────────────────────
 
