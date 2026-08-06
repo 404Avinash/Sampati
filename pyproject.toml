@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "decode-sih"
+version = "0.1.0"
+description = "Real-time UPI Fraud Prevention via Behavioral Graph Intelligence"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Decode Team" }]
+keywords = ["fraud-detection", "upi", "graph-intelligence", "real-time", "fintech"]
+
+[project.urls]
+Repository = "https://github.com/decode-team/decode-sih"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "emitter*", "pipeline*", "models*", "api*", "config*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "I", "N", "UP", "ANN", "ASYNC", "B", "SIM"]
+ignore = ["ANN101", "ANN102"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["core", "emitter", "pipeline", "models", "api"]
+omit = ["tests/*", "dashboard/*"]

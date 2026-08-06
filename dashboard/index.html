@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="UPI Fraud Prevention — Real-time behavioral graph intelligence system" />
+  <title>UPI Fraud Prevention · decode_sih</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/dashboard.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SIDEBAR NAV
+  ════════════════════════════════════════════════════════════ -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <svg class="brand-logo" viewBox="0 0 24 24" fill="none">
+        <polygon points="12,2 22,7 22,17 12,22 2,17 2,7" stroke="currentColor" stroke-width="1.5" fill="none"/>
+        <circle cx="12" cy="12" r="3" fill="currentColor"/>
+        <line x1="12" y1="2"  x2="12" y2="9"  stroke="currentColor" stroke-width="1.2"/>
+        <line x1="12" y1="15" x2="12" y2="22" stroke="currentColor" stroke-width="1.2"/>
+        <line x1="2"  y1="7"  x2="8"  y2="10.5" stroke="currentColor" stroke-width="1.2"/>
+        <line x1="16" y1="13.5" x2="22" y2="17" stroke="currentColor" stroke-width="1.2"/>
+        <line x1="2"  y1="17" x2="8"  y2="13.5" stroke="currentColor" stroke-width="1.2"/>
+        <line x1="16" y1="10.5" x2="22" y2="7" stroke="currentColor" stroke-width="1.2"/>
+      </svg>
+      <div class="brand-text">
+        <span class="brand-name">decode_sih</span>
+        <span class="brand-sub">UPI Fraud Intelligence</span>
+      </div>
+    </div>
+
+    <ul class="nav-list" role="tablist">
+      <li><button class="nav-item active" role="tab" data-page="monitor" onclick="switchPage('monitor', this)">
+        <svg viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg>
+        <span>Live Monitor</span>
+      </button></li>
+      <li><button class="nav-item" role="tab" data-page="alerts" onclick="switchPage('alerts', this)">
+        <svg viewBox="0 0 20 20" fill="none"><path d="M10 2L2 16h16L10 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><line x1="10" y1="9" x2="10" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="14" r="0.8" fill="currentColor"/></svg>
+        <span>Alerts</span>
+        <span class="nav-badge" id="nav-alert-count">0</span>
+      </button></li>
+      <li><button class="nav-item" role="tab" data-page="graph" onclick="switchPage('graph', this)">
+        <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="3" cy="4" r="2" stroke="currentColor" stroke-width="1.5"/><circle cx="17" cy="4" r="2" stroke="currentColor" stroke-width="1.5"/><circle cx="3" cy="16" r="2" stroke="currentColor" stroke-width="1.5"/><circle cx="17" cy="16" r="2" stroke="currentColor" stroke-width="1.5"/><line x1="5" y1="5.5" x2="8" y2="8.5" stroke="currentColor" stroke-width="1.2"/><line x1="15" y1="5.5" x2="12" y2="8.5" stroke="currentColor" stroke-width="1.2"/><line x1="5" y1="14.5" x2="8" y2="11.5" stroke="currentColor" stroke-width="1.2"/><line x1="15" y1="14.5" x2="12" y2="11.5" stroke="currentColor" stroke-width="1.2"/></svg>
+        <span>Graph View</span>
+      </button></li>
+      <li><button class="nav-item" role="tab" data-page="system" onclick="switchPage('system', this)">
+        <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M14.4 5.6l-1.4 1.4M5.6 14.4l-1.4 1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <span>System</span>
+      </button></li>
+    </ul>
+
+    <div class="sidebar-footer">
+      <div class="connection-status" id="conn-status">
+        <span class="conn-dot" id="conn-dot"></span>
+        <span id="conn-label">Connecting…</span>
+      </div>
+      <div class="uptime-row">
+        <span class="uptime-label">Uptime</span>
+        <span class="mono" id="uptime">—</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MAIN CONTENT AREA
+  ════════════════════════════════════════════════════════════ -->
+  <main class="content" id="main-content">
+
+    <!-- ── PAGE: LIVE MONITOR ─────────────────────────────────── -->
+    <section class="page active" id="page-monitor">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Live Monitor</h1>
+          <p class="page-desc">Real-time UPI transaction stream and fraud detection</p>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-outline" id="btn-pause" onclick="togglePause()">
+            <svg viewBox="0 0 16 16" fill="none"><rect x="3" y="3" width="4" height="10" rx="1" fill="currentColor"/><rect x="9" y="3" width="4" height="10" rx="1" fill="currentColor"/></svg>
+            Pause
+          </button>
+          <button class="btn btn-primary" onclick="openInjectModal()">
+            <svg viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Inject Attack
+          </button>
+        </div>
+      </div>
+
+      <!-- Metric strip -->
+      <div class="metric-strip">
+        <div class="metric">
+          <span class="metric-value" id="m-tps">—</span>
+          <span class="metric-label">TPS</span>
+        </div>
+        <div class="metric-divider"></div>
+        <div class="metric">
+          <span class="metric-value" id="m-processed">—</span>
+          <span class="metric-label">Processed</span>
+        </div>
+        <div class="metric-divider"></div>
+        <div class="metric">
+          <span class="metric-value metric-value--danger" id="m-blocked">—</span>
+          <span class="metric-label">Blocked</span>
+        </div>
+        <div class="metric-divider"></div>
+        <div class="metric">
+          <span class="metric-value metric-value--warn" id="m-flagged">—</span>
+          <span class="metric-label">Flagged</span>
+        </div>
+        <div class="metric-divider"></div>
+        <div class="metric">
+          <span class="metric-value" id="m-latency">—<span style="font-size:12px;font-weight:400">ms</span></span>
+          <span class="metric-label">Avg Latency</span>
+        </div>
+        <div class="metric-divider"></div>
+        <div class="metric">
+          <span class="metric-value metric-value--ok" id="m-sla">—</span>
+          <span class="metric-label">SLA Compliance</span>
+        </div>
+      </div>
+
+      <!-- Two column: transaction feed + recent alerts -->
+      <div class="monitor-grid">
+        <!-- Live transaction log -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Transaction Feed</h2>
+            <span class="live-badge">● LIVE</span>
+          </div>
+          <div class="card-body" id="txn-feed">
+            <div class="empty-msg">Waiting for transactions…</div>
+          </div>
+        </div>
+
+        <!-- Recent detections -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Recent Detections</h2>
+            <span class="count-chip" id="detection-count">0</span>
+          </div>
+          <div class="card-body" id="detection-feed">
+            <div class="empty-msg">No detections yet</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PAGE: ALERTS ───────────────────────────────────────── -->
+    <section class="page" id="page-alerts">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Alerts</h1>
+          <p class="page-desc">All fraud alerts with full causal explanations</p>
+        </div>
+        <div class="page-actions">
+          <select class="select" id="alert-filter" onchange="filterAlerts()">
+            <option value="all">All patterns</option>
+            <option value="FAN_OUT">Fan-Out</option>
+            <option value="FAN_IN">Fan-In</option>
+            <option value="SCATTER_GATHER">Scatter-Gather</option>
+            <option value="VELOCITY_ABUSE">Velocity</option>
+          </select>
+          <select class="select" id="verdict-filter" onchange="filterAlerts()">
+            <option value="all">All verdicts</option>
+            <option value="BLOCK">Blocked</option>
+            <option value="FLAG">Flagged</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Pattern summary row -->
+      <div class="pattern-summary" id="pattern-summary">
+        <div class="pattern-chip pattern-chip--fan-out" onclick="setFilter('FAN_OUT')">
+          <span class="pattern-chip-label">Fan-Out</span>
+          <span class="pattern-chip-count" id="pc-fan-out">0</span>
+        </div>
+        <div class="pattern-chip pattern-chip--fan-in" onclick="setFilter('FAN_IN')">
+          <span class="pattern-chip-label">Fan-In</span>
+          <span class="pattern-chip-count" id="pc-fan-in">0</span>
+        </div>
+        <div class="pattern-chip pattern-chip--scatter" onclick="setFilter('SCATTER_GATHER')">
+          <span class="pattern-chip-label">Scatter-Gather</span>
+          <span class="pattern-chip-count" id="pc-scatter">0</span>
+        </div>
+        <div class="pattern-chip pattern-chip--velocity" onclick="setFilter('VELOCITY_ABUSE')">
+          <span class="pattern-chip-label">Velocity</span>
+          <span class="pattern-chip-count" id="pc-velocity">0</span>
+        </div>
+      </div>
+
+      <!-- Alert table -->
+      <div class="card card--full">
+        <div class="card-body no-pad">
+          <table class="alert-table" id="alert-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Pattern</th>
+                <th>Verdict</th>
+                <th>Risk Score</th>
+                <th>Latency</th>
+                <th>Accounts</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="alert-table-body">
+              <tr><td colspan="7" class="table-empty">No alerts yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PAGE: GRAPH VIEW ───────────────────────────────────── -->
+    <section class="page" id="page-graph">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Graph View</h1>
+          <p class="page-desc">Live behavioral transaction network — topology reveals fraud</p>
+        </div>
+        <div class="page-actions">
+          <div class="legend-row">
+            <span class="legend-dot legend-dot--normal"></span><span>Normal</span>
+            <span class="legend-dot legend-dot--flagged"></span><span>Flagged</span>
+            <span class="legend-dot legend-dot--blocked"></span><span>Blocked</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="graph-page-layout">
+        <!-- Graph canvas -->
+        <div class="card card--graph">
+          <canvas id="graph-canvas"></canvas>
+          <div class="graph-loading" id="graph-loading">
+            <div class="spinner"></div>
+            <p>Waiting for graph data…</p>
+          </div>
+        </div>
+
+        <!-- Graph sidebar: stats + selected node -->
+        <div class="graph-sidebar">
+          <div class="card">
+            <div class="card-header"><h2 class="card-title">Network Stats</h2></div>
+            <div class="card-body">
+              <div class="stat-row-v">
+                <span class="stat-label-v">Nodes</span>
+                <span class="mono" id="gs-nodes">—</span>
+              </div>
+              <div class="stat-row-v">
+                <span class="stat-label-v">Edges</span>
+                <span class="mono" id="gs-edges">—</span>
+              </div>
+              <div class="stat-row-v">
+                <span class="stat-label-v">Flagged</span>
+                <span class="mono text-warn" id="gs-flagged">—</span>
+              </div>
+              <div class="stat-row-v">
+                <span class="stat-label-v">Blocked</span>
+                <span class="mono text-danger" id="gs-blocked">—</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" id="node-detail-card" style="display:none">
+            <div class="card-header">
+              <h2 class="card-title">Selected Node</h2>
+              <button class="icon-btn" onclick="clearNodeDetail()">✕</button>
+            </div>
+            <div class="card-body" id="node-detail-body"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h2 class="card-title">Topology Guide</h2></div>
+            <div class="card-body">
+              <p class="help-text"><strong>Fan-Out</strong> — one node rapidly sends to many. The scatter phase.</p>
+              <p class="help-text"><strong>Fan-In</strong> — many nodes funnel into one collector. The mule.</p>
+              <p class="help-text"><strong>Scatter-Gather</strong> — split, multi-hop, reconverge. Smurfing.</p>
+              <p class="help-text">Topology is invariant — changing phone numbers does not change the shape.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PAGE: SYSTEM ───────────────────────────────────────── -->
+    <section class="page" id="page-system">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">System</h1>
+          <p class="page-desc">Operational metrics, configuration, and emitter controls</p>
+        </div>
+      </div>
+
+      <div class="system-grid">
+        <!-- Latency breakdown -->
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">Detection Latency</h2></div>
+          <div class="card-body">
+            <div class="latency-gauge-wrap">
+              <canvas id="latency-gauge" width="200" height="110"></canvas>
+              <div class="gauge-center">
+                <span id="gauge-val">0</span>
+                <span class="gauge-unit">ms</span>
+              </div>
+            </div>
+            <div class="latency-table">
+              <div class="lt-row"><span class="lt-label">P50</span><span class="mono" id="lt-p50">—</span></div>
+              <div class="lt-row"><span class="lt-label">P95</span><span class="mono" id="lt-p95">—</span></div>
+              <div class="lt-row"><span class="lt-label">P99</span><span class="mono" id="lt-p99">—</span></div>
+              <div class="lt-row"><span class="lt-label">SLA Budget</span><span class="mono">200ms</span></div>
+              <div class="lt-row"><span class="lt-label">SLA Breaches</span><span class="mono text-danger" id="lt-breaches">—</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Emitter controls -->
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">Emitter Controls</h2></div>
+          <div class="card-body">
+            <div class="control-group">
+              <label class="control-label">Stream Status</label>
+              <div class="control-row">
+                <button class="btn btn-outline" onclick="apiPost('/api/emitter/pause')">Pause</button>
+                <button class="btn btn-outline" onclick="apiPost('/api/emitter/resume')">Resume</button>
+              </div>
+            </div>
+            <div class="control-group">
+              <label class="control-label" for="tps-input">Target TPS</label>
+              <div class="control-row">
+                <input class="input" type="number" id="tps-input" min="1" max="5000" value="100" />
+                <button class="btn btn-primary" onclick="setTPS()">Apply</button>
+              </div>
+            </div>
+            <div class="control-group">
+              <label class="control-label">Fraud Injection</label>
+              <div class="scenario-list">
+                <button class="scenario-row" onclick="injectScenario('fan_out')"><span class="scenario-name">Fan-Out Scatter</span><span class="scenario-arrow">→</span></button>
+                <button class="scenario-row" onclick="injectScenario('fan_in')"><span class="scenario-name">Fan-In Collector</span><span class="scenario-arrow">→</span></button>
+                <button class="scenario-row" onclick="injectScenario('scatter_gather')"><span class="scenario-name">Scatter-Gather</span><span class="scenario-arrow">→</span></button>
+                <button class="scenario-row" onclick="injectScenario('velocity')"><span class="scenario-name">Velocity Burst</span><span class="scenario-arrow">→</span></button>
+                <button class="scenario-row scenario-row--primary" onclick="injectScenario('random')"><span class="scenario-name">Random Attack</span><span class="scenario-arrow">→</span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pipeline stats -->
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">Pipeline Stats</h2></div>
+          <div class="card-body">
+            <div class="lt-row"><span class="lt-label">Total Processed</span><span class="mono" id="sys-processed">—</span></div>
+            <div class="lt-row"><span class="lt-label">Total Alerts</span><span class="mono" id="sys-alerts">—</span></div>
+            <div class="lt-row"><span class="lt-label">Blocked</span><span class="mono text-danger" id="sys-blocked">—</span></div>
+            <div class="lt-row"><span class="lt-label">Flagged</span><span class="mono text-warn" id="sys-flagged">—</span></div>
+            <div class="lt-row"><span class="lt-label">Graph Nodes</span><span class="mono" id="sys-nodes">—</span></div>
+            <div class="lt-row"><span class="lt-label">Graph Edges</span><span class="mono" id="sys-edges">—</span></div>
+            <div class="lt-row"><span class="lt-label">Current TPS</span><span class="mono" id="sys-tps">—</span></div>
+            <div class="lt-row"><span class="lt-label">Uptime</span><span class="mono" id="sys-uptime">—</span></div>
+          </div>
+        </div>
+
+        <!-- Emitter stats -->
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">Emitter Stats</h2></div>
+          <div class="card-body">
+            <div class="lt-row"><span class="lt-label">Mode</span><span class="mono" id="em-mode">—</span></div>
+            <div class="lt-row"><span class="lt-label">Total Emitted</span><span class="mono" id="em-total">—</span></div>
+            <div class="lt-row"><span class="lt-label">Fraud Emitted</span><span class="mono text-warn" id="em-fraud">—</span></div>
+            <div class="lt-row"><span class="lt-label">Actual Fraud Rate</span><span class="mono" id="em-rate">—</span></div>
+            <div class="lt-row"><span class="lt-label">Current TPS</span><span class="mono" id="em-tps">—</span></div>
+            <div class="lt-row"><span class="lt-label">Running</span><span class="mono" id="em-running">—</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       ALERT DETAIL MODAL
+  ════════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+    <div class="modal" id="alert-modal">
+      <div class="modal-header">
+        <div>
+          <div class="modal-tag" id="modal-tag">BLOCK</div>
+          <h2 class="modal-title" id="modal-title">Alert Details</h2>
+        </div>
+        <button class="icon-btn" onclick="closeAlert()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       INJECT MODAL
+  ════════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="inject-overlay" onclick="closeInjectModal(event)">
+    <div class="modal modal--sm">
+      <div class="modal-header">
+        <h2 class="modal-title">Inject Fraud Scenario</h2>
+        <button class="icon-btn" onclick="closeInjectModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Trigger a synthetic coordinated attack through the detection pipeline.</p>
+        <div class="inject-list">
+          <button class="inject-option" onclick="injectScenario('fan_out')">
+            <div class="inject-option-body">
+              <strong>Fan-Out Scatter</strong>
+              <span>1 mule sender → N recipients rapidly</span>
+            </div>
+            <svg viewBox="0 0 16 16" fill="none"><path d="M13 8H3M8 3l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="inject-option" onclick="injectScenario('fan_in')">
+            <div class="inject-option-body">
+              <strong>Fan-In Collector</strong>
+              <span>N feeders → 1 mule collector account</span>
+            </div>
+            <svg viewBox="0 0 16 16" fill="none"><path d="M13 8H3M8 3l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="inject-option" onclick="injectScenario('scatter_gather')">
+            <div class="inject-option-body">
+              <strong>Scatter-Gather</strong>
+              <span>Split → multi-hop → reconverge (smurfing)</span>
+            </div>
+            <svg viewBox="0 0 16 16" fill="none"><path d="M13 8H3M8 3l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="inject-option" onclick="injectScenario('velocity')">
+            <div class="inject-option-body">
+              <strong>Velocity Burst</strong>
+              <span>Automated bot flood — high frequency</span>
+            </div>
+            <svg viewBox="0 0 16 16" fill="none"><path d="M13 8H3M8 3l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="inject-option inject-option--primary" onclick="injectScenario('random')">
+            <div class="inject-option-body">
+              <strong>Random Attack</strong>
+              <span>Engine picks a random scenario</span>
+            </div>
+            <svg viewBox="0 0 16 16" fill="none"><path d="M13 8H3M8 3l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notifications -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="/static/js/graph.js"></script>
+  <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
