@@ -121,6 +121,8 @@ class StreamProcessor:
 
         except asyncio.CancelledError:
             logger.info("StreamProcessor task cancelled")
+        except Exception as e:
+            logger.exception("StreamProcessor crashed due to an unhandled exception: %s", e)
         finally:
             eviction_task.cancel()
             metrics_task.cancel()
@@ -201,7 +203,7 @@ class StreamProcessor:
                     "receiver": txn.receiver_id,
                     "amount":   txn.amount_rupees,
                     "graph":    snapshot,
-                    "metrics":  self._build_metrics_payload(),
+                    "metrics":  await self.get_metrics(),
                 }
                 asyncio.create_task(self._broadcast(payload))
 
@@ -236,7 +238,7 @@ class StreamProcessor:
         payload = {
             "type":    "fraud_alert",
             "alert":   dashboard_payload,
-            "metrics": self._build_metrics_payload(),
+            "metrics": await self.get_metrics(),
         }
         asyncio.create_task(self._broadcast(payload))
 
@@ -257,7 +259,7 @@ class StreamProcessor:
             if self._broadcasters:
                 payload = {
                     "type":    "metrics_tick",
-                    "metrics": self._build_metrics_payload(),
+                    "metrics": await self.get_metrics(),
                 }
                 asyncio.create_task(self._broadcast(payload))
 
@@ -280,9 +282,11 @@ class StreamProcessor:
         for fn in dead:
             self.remove_broadcaster(fn)
 
-    def _build_metrics_payload(self) -> dict:
+    async def get_metrics(self) -> dict:
         elapsed = time.time() - self._start_time if self._start_time else 0
         lat = self._latency_tracker.to_dict()
+        node_count = await self._graph.store.get_node_count()
+        edge_count = await self._graph.store.get_edge_count()
         return {
             "uptime_s":           round(elapsed, 1),
             "total_processed":    self._total_processed,
@@ -294,8 +298,8 @@ class StreamProcessor:
             "p99_latency_ms":     lat["p99_ms"],
             "sla_compliance":     lat["sla_compliance_rate"],
             "sla_breaches":       lat["breach_count"],
-            "graph_nodes":        self._graph.node_count,
-            "graph_edges":        self._graph.edge_count,
+            "graph_nodes":        node_count,
+            "graph_edges":        edge_count,
             "emitter":            self._emitter.stats,
         }
 
@@ -304,10 +308,6 @@ class StreamProcessor:
     @property
     def recent_alerts(self) -> list[dict]:
         return list(self._recent_alerts)
-
-    @property
-    def metrics(self) -> dict:
-        return self._build_metrics_payload()
 
     @property
     def graph(self) -> BehavioralGraphEngine:

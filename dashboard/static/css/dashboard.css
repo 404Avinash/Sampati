@@ -1,18 +1,18 @@
 /* ── Tokens ── */
 :root {
-  --bg: #0f1117;
-  --bg-panel: #161b27;
-  --bg-card: #1c2235;
-  --bg-hover: #212840;
-  --border: rgba(255,255,255,0.08);
-  --border-strong: rgba(255,255,255,0.14);
-  --text: #e2e8f0;
-  --text-2: #8892a4;
-  --text-3: #4a5568;
-  --green: #22c55e;
-  --amber: #f59e0b;
-  --red: #ef4444;
-  --blue: #3b82f6;
+  --bg: #f8fafc;
+  --bg-panel: #ffffff;
+  --bg-card: #ffffff;
+  --bg-hover: #f1f5f9;
+  --border: rgba(0,0,0,0.08);
+  --border-strong: rgba(0,0,0,0.14);
+  --text: #0f172a;
+  --text-2: #475569;
+  --text-3: #94a3b8;
+  --green: #16a34a;
+  --amber: #d97706;
+  --red: #dc2626;
+  --blue: #2563eb;
   --sidebar-w: 220px;
   --r: 8px;
   --font: 'Inter', sans-serif;
@@ -23,7 +23,7 @@
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:13px;line-height:1.5;overflow:hidden}
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}
+::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.2);border-radius:2px}
 button{cursor:pointer;font-family:var(--font);border:none;background:none}
 input,select{font-family:var(--font)}
 
@@ -185,7 +185,7 @@ body{display:grid;grid-template-columns:var(--sidebar-w) 1fr;height:100vh}
   cursor:pointer;transition:background .12s;animation:row-in .25s ease;
 }
 .detection-row:last-child{border-bottom:none}
-.detection-row:hover{background:rgba(255,255,255,.03)}
+.detection-row:hover{background:rgba(0,0,0,.04)}
 .detection-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px}
 .detection-pattern{font-size:12px;font-weight:600}
 .detection-score{font-family:var(--mono);font-size:11px;color:var(--text-2)}
@@ -337,12 +337,12 @@ body{display:grid;grid-template-columns:var(--sidebar-w) 1fr;height:100vh}
 .modal-accounts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .account-chip{
   font-family:var(--mono);font-size:10px;
-  background:rgba(255,255,255,.05);border:1px solid var(--border);
+  background:rgba(0,0,0,.05);border:1px solid var(--border);
   border-radius:4px;padding:3px 8px;color:var(--text-2);
 }
 .modal-action-text{
   font-size:12px;color:var(--text-2);line-height:1.7;
-  background:rgba(255,255,255,.03);border:1px solid var(--border);
+  background:rgba(0,0,0,.03);border:1px solid var(--border);
   border-radius:6px;padding:12px;
 }
 
@@ -379,11 +379,11 @@ body{display:grid;grid-template-columns:var(--sidebar-w) 1fr;height:100vh}
 .cypher-code {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.8rem;
-  background-color: rgba(15, 23, 42, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   padding: 4px 8px;
   border-radius: 4px;
-  color: #38bdf8;
+  color: #0369a1; /* Dark blue */
   display: block;
   white-space: pre-wrap;
   word-break: break-all;

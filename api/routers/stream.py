@@ -111,7 +111,7 @@ async def websocket_stream(
         await websocket.send_json({
             "type":    "connected",
             "message": "Connected to UPI Fraud Prevention War Room",
-            "metrics": proc.metrics,
+            "metrics": await proc.get_metrics(),
             "recent_alerts": proc.recent_alerts[:10],
         })
 

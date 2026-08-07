@@ -67,7 +67,7 @@ async def get_status() -> StatusResponse:
     proc = get_processor()
     return StatusResponse(
         status="running",
-        metrics=proc.metrics,
+        metrics=await proc.get_metrics(),
         connections=connection_manager.active_connections,
     )
 

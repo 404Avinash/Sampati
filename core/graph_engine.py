@@ -145,6 +145,12 @@ class BehavioralGraphEngine:
         """Retrieve an account node by ID."""
         return await self.store.get_node(account_id)
 
+    async def flag_account(
+        self, account_id: str, pattern: FraudPattern, risk_score: float, block: bool = False
+    ) -> None:
+        """Mark an account as implicated in fraud."""
+        await self.store.flag_node(account_id, pattern, risk_score, block)
+
     async def get_neighbourhood(
         self,
         account_id: str,

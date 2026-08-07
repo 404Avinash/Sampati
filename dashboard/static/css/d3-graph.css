@@ -27,7 +27,7 @@
 /* ─── Links (Edges) ──────────────────────────────────────────────────────── */
 
 .d3-link {
-  stroke: rgba(148, 163, 184, 0.3); /* Slate 400 with opacity */
+  stroke: rgba(15, 23, 42, 0.15); /* Dark slate with opacity for light theme */
   stroke-width: 1.5px;
   transition: stroke 0.3s ease;
 }
@@ -35,13 +35,13 @@
 /* ─── Nodes ─────────────────────────────────────────────────────────────── */
 
 .d3-node {
-  stroke: rgba(255, 255, 255, 0.1);
+  stroke: rgba(0, 0, 0, 0.1);
   stroke-width: 2px;
   transition: fill 0.3s ease, filter 0.3s ease, stroke 0.3s ease;
 }
 
 .d3-node:hover {
-  stroke: rgba(255, 255, 255, 0.8);
+  stroke: rgba(0, 0, 0, 0.5);
   stroke-width: 3px;
 }
 
@@ -91,25 +91,25 @@
   text-align: left;
   padding: 12px;
   font-size: 12px;
-  background: rgba(15, 23, 42, 0.95); /* Slate 900 */
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: var(--radius-md);
-  color: var(--color-text);
+  color: var(--text);
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.2s ease;
   backdrop-filter: blur(4px);
   z-index: 100;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
 }
 
 .d3-tooltip-title {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  color: var(--color-text-dim);
+  color: var(--text-2);
   margin-bottom: 8px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .d3-tooltip-row {
@@ -124,12 +124,12 @@
 }
 
 .d3-tooltip-label {
-  color: var(--color-text-dim);
+  color: var(--text-2);
 }
 
 .d3-tooltip-value {
   font-weight: 600;
-  color: var(--color-text);
+  color: var(--text);
 }
 
 .d3-tooltip-value.blocked {
