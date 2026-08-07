@@ -88,7 +88,8 @@ async def generate_fan_out_attack(
     """
     n = num_receivers or random.randint(6, 12)
     sender = random.choice(MULE_ACCOUNT_POOL)
-    receivers = random.sample(LEGITIMATE_ACCOUNT_POOL, min(n, len(LEGITIMATE_ACCOUNT_POOL)))
+    safe_pool = [a for a in LEGITIMATE_ACCOUNT_POOL if a != sender]
+    receivers = random.sample(safe_pool, min(n, len(safe_pool)))
     amounts = [random.randint(50_000_00, 200_000_00) for _ in receivers]
 
     # Phase 1: dormancy warmup
@@ -113,7 +114,8 @@ async def generate_fan_in_attack(
     """
     n = num_senders or random.randint(5, 10)
     collector = random.choice(MULE_ACCOUNT_POOL)
-    senders = random.sample(LEGITIMATE_ACCOUNT_POOL, min(n, len(LEGITIMATE_ACCOUNT_POOL)))
+    safe_pool = [a for a in LEGITIMATE_ACCOUNT_POOL if a != collector]
+    senders = random.sample(safe_pool, min(n, len(safe_pool)))
     amounts = [random.randint(5_000_00, 30_000_00) for _ in senders]
 
     # Phase 1: collector makes normal transactions to look legitimate
@@ -140,9 +142,8 @@ async def generate_scatter_gather_attack(
     n = num_intermediaries or random.randint(3, 7)
     origin = random.choice(MULE_ACCOUNT_POOL)
     collector = random.choice([m for m in MULE_ACCOUNT_POOL if m != origin])
-    intermediaries = random.sample(
-        LEGITIMATE_ACCOUNT_POOL, min(n, len(LEGITIMATE_ACCOUNT_POOL))
-    )
+    safe_pool = [a for a in LEGITIMATE_ACCOUNT_POOL if a not in (origin, collector)]
+    intermediaries = random.sample(safe_pool, min(n, len(safe_pool)))
 
     total_amount = random.randint(50_000_00, 200_000_00)
     # Split unevenly to avoid obvious round-number detection
@@ -177,7 +178,8 @@ async def generate_velocity_abuse_attack(
     """
     count = burst_count or random.randint(25, 60)
     sender = random.choice(MULE_ACCOUNT_POOL)
-    receivers = random.choices(LEGITIMATE_ACCOUNT_POOL, k=count)
+    safe_pool = [a for a in LEGITIMATE_ACCOUNT_POOL if a != sender]
+    receivers = random.choices(safe_pool, k=count)
 
     for receiver in receivers:
         amount = random.randint(100_00, 5_000_00)
