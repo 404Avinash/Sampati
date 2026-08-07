@@ -164,37 +164,43 @@ class TransactionEmitter:
         fraud_queue: list[UPITransaction] = []
 
         while self._running:
-            # Handle pause
-            while self._paused:
-                await asyncio.sleep(0.1)
+            try:
+                # Handle pause
+                while self._paused:
+                    await asyncio.sleep(0.1)
 
-            # Drain any pending fraud transactions first (injected attack sequences)
-            if fraud_queue:
-                txn = fraud_queue.pop(0)
+                # Drain any pending fraud transactions first (injected attack sequences)
+                if fraud_queue:
+                    txn = fraud_queue.pop(0)
+                    yield txn
+                    self._record_emission(is_fraud=True)
+                    continue
+
+                # Check if it's time to inject a fraud scenario
+                if self._total_emitted >= self._next_fraud_at:
+                    attack_txns = await self._collect_attack()
+                    fraud_queue.extend(attack_txns)
+                    self._next_fraud_at = self._total_emitted + self._next_fraud_index()
+                    logger.debug(
+                        "Queued %d fraud txns | next injection in ~%d txns",
+                        len(attack_txns),
+                        self._next_fraud_at - self._total_emitted,
+                    )
+
+                # Generate a normal legitimate transaction
+                txn = self._generate_legitimate_txn()
                 yield txn
-                self._record_emission(is_fraud=True)
-                continue
+                self._record_emission(is_fraud=False)
 
-            # Check if it's time to inject a fraud scenario
-            if self._total_emitted >= self._next_fraud_at:
-                attack_txns = await self._collect_attack()
-                fraud_queue.extend(attack_txns)
-                self._next_fraud_at = self._total_emitted + self._next_fraud_index()
-                logger.debug(
-                    "Queued %d fraud txns | next injection in ~%d txns",
-                    len(attack_txns),
-                    self._next_fraud_at - self._total_emitted,
-                )
+                # Throttle to target TPS with time-of-day load modulation
+                effective_tps = self._cfg.tps * current_load_multiplier()
+                delay_ms = sample_inter_arrival_ms(max(effective_tps, 1.0))
+                await asyncio.sleep(delay_ms / 1000.0)
 
-            # Generate a normal legitimate transaction
-            txn = self._generate_legitimate_txn()
-            yield txn
-            self._record_emission(is_fraud=False)
-
-            # Throttle to target TPS with time-of-day load modulation
-            effective_tps = self._cfg.tps * current_load_multiplier()
-            delay_ms = sample_inter_arrival_ms(max(effective_tps, 1.0))
-            await asyncio.sleep(delay_ms / 1000.0)
+            except Exception as e:
+                logger.exception("FATAL: Unhandled exception in synthetic stream loop: %s", e)
+                # Brief sleep to prevent tight-looping on persistent errors
+                await asyncio.sleep(1.0)
 
     async def _collect_attack(self) -> list[UPITransaction]:
         """Collect all transactions from a random attack generator into a list."""

@@ -18,11 +18,24 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Security
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
+
+from config.settings import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["control"])
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+def verify_api_key(api_key: str = Security(api_key_header)) -> str:
+    if not api_key or api_key != settings.api.admin_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing X-API-Key header",
+        )
+    return api_key
 
 
 # ─── Request / Response Models ────────────────────────────────────────────────
@@ -87,7 +100,7 @@ async def get_graph_snapshot() -> dict:
 
 
 @router.post("/inject", summary="Manually inject a fraud scenario")
-async def inject_fraud(body: InjectRequest) -> dict:
+async def inject_fraud(body: InjectRequest, _: str = Depends(verify_api_key)) -> dict:
     """
     Manually trigger a synthetic fraud scenario for demonstration purposes.
     The scenario will be processed through the full detection pipeline.
@@ -111,21 +124,21 @@ async def inject_fraud(body: InjectRequest) -> dict:
 
 
 @router.post("/emitter/pause", summary="Pause the transaction stream")
-async def pause_emitter() -> dict:
+async def pause_emitter(_: str = Depends(verify_api_key)) -> dict:
     from api.main import get_processor
     get_processor().pause()
     return {"status": "paused"}
 
 
 @router.post("/emitter/resume", summary="Resume the transaction stream")
-async def resume_emitter() -> dict:
+async def resume_emitter(_: str = Depends(verify_api_key)) -> dict:
     from api.main import get_processor
     get_processor().resume()
     return {"status": "resumed"}
 
 
 @router.post("/emitter/tps", summary="Adjust target TPS at runtime")
-async def set_tps(body: TPSRequest) -> dict:
+async def set_tps(body: TPSRequest, _: str = Depends(verify_api_key)) -> dict:
     from api.main import get_processor
     proc = get_processor()
     # Update the emitter's internal setting (not pydantic frozen, so direct attr access)

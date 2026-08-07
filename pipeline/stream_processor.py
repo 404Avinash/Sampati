@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, Callable, Coroutine
 from config.settings import settings
 from core.explainability import build_rich_explanation, format_audit_log_line
 from core.graph_engine import BehavioralGraphEngine
+from core.storage import InMemoryGraphStore
 from core.models import (
     FraudAlert,
     PipelineMetrics,
@@ -71,7 +72,8 @@ class StreamProcessor:
     """
 
     def __init__(self) -> None:
-        self._graph     = BehavioralGraphEngine()
+        store = InMemoryGraphStore()
+        self._graph     = BehavioralGraphEngine(store=store)
         self._emitter   = TransactionEmitter()
         self._running   = False
         self._paused    = False

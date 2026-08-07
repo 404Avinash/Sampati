@@ -26,7 +26,8 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
+from config.settings import settings
 
 if TYPE_CHECKING:
     from pipeline.stream_processor import StreamProcessor
@@ -42,9 +43,17 @@ class ConnectionManager:
         self._connections: set[WebSocket] = set()
 
     async def connect(self, ws: WebSocket) -> None:
+        if len(self._connections) >= settings.api.ws_max_connections:
+            await ws.accept()
+            await ws.send_json({"type": "error", "message": "Too many active connections"})
+            await ws.close(code=status.WS_1008_POLICY_VIOLATION)
+            logger.warning("WS connection rejected: connection limit reached (%d)", settings.api.ws_max_connections)
+            return False
+
         await ws.accept()
         self._connections.add(ws)
         logger.info("WS client connected | total=%d", len(self._connections))
+        return True
 
     def disconnect(self, ws: WebSocket) -> None:
         self._connections.discard(ws)
@@ -90,7 +99,10 @@ async def websocket_stream(
     from api.main import get_processor
     proc = get_processor()
 
-    await connection_manager.connect(websocket)
+    accepted = await connection_manager.connect(websocket)
+    if not accepted:
+        return
+
     broadcaster = make_broadcaster(websocket)
     proc.add_broadcaster(broadcaster)
 

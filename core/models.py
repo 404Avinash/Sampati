@@ -133,14 +133,27 @@ class UPITransaction(BaseModel):
         )
 
 
+class Edge(BaseModel):
+    """A directed, timestamped transaction link between two accounts."""
+    model_config = {"frozen": True}
+
+    txn_id: str
+    target_id: str  # The "other" node (receiver if out_edge, sender if in_edge)
+    amount_paise: int
+    timestamp: datetime
+
+
 class AccountNode(BaseModel):
     """
     A graph node representing a UPI account (sender or receiver).
-    Updated in-place as transactions flow through the system.
+    When serialized or retrieved from the GraphStore, edges are strongly typed.
     """
 
     account_id: str
     account_type: AccountType = AccountType.UNKNOWN
+    out_edges: list[Edge] = Field(default_factory=list)
+    in_edges: list[Edge] = Field(default_factory=list)
+    flags: list[str] = Field(default_factory=list)
     first_seen: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_seen: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

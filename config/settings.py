@@ -148,6 +148,10 @@ class APISettings(BaseSettings):
     )
 
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8000"]
+    admin_key: str = Field(
+        default="demo-secret-key-123",
+        description="Static token required for mutating control endpoints",
+    )
     ws_max_connections: Annotated[int, Field(ge=1, le=1000)] = 50
     ws_broadcast_interval_ms: Annotated[int, Field(ge=50, le=5000)] = 100
 
