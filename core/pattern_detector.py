@@ -56,11 +56,15 @@ def _compute_risk_score(
     pattern: FraudPattern,
     magnitude: float,       # e.g. out-degree, velocity count — normalised 0-1
     amount_normalised: float,  # transaction amount normalised 0-1
+    amount_paise: int = 0,  # raw amount for tier multiplier
 ) -> float:
     """
     Deterministic, interpretable risk scoring.
     Weights are calibrated to push high-confidence structural patterns above
     the BLOCK threshold (0.85) while keeping borderline cases in FLAG zone.
+
+    Amount-tier multiplier ensures \u20b910 fan-outs get flagged but not blocked
+    while \u20b91 lakh fan-outs trigger an immediate BLOCK.
     """
     pattern_base_weight = {
         FraudPattern.FAN_OUT:        0.72,
@@ -71,7 +75,18 @@ def _compute_risk_score(
         FraudPattern.ROUND_TRIP:     0.75,
     }
     base = pattern_base_weight.get(pattern, 0.5)
-    score = base + (0.15 * magnitude) + (0.10 * amount_normalised)
+
+    # Amount-tier multiplier: low-value bursts are less dangerous
+    if amount_paise < 50_000:          # < \u20b9500
+        amount_tier = 0.80
+    elif amount_paise < 500_000:       # \u20b9500 \u2013 \u20b95,000
+        amount_tier = 1.00
+    elif amount_paise < 5_000_000:     # \u20b95,000 \u2013 \u20b950,000
+        amount_tier = 1.10
+    else:                              # > \u20b950,000
+        amount_tier = 1.20
+
+    score = (base + (0.15 * magnitude) + (0.10 * amount_normalised)) * amount_tier
     return round(min(score, 1.0), 4)
 
 
@@ -128,7 +143,10 @@ async def detect_fan_out(
     total_amount = sum(e.total_amount_paise for e in outbound)
     magnitude = min(count / (threshold * 3), 1.0)   # normalise
     amount_norm = min(total_amount / 10_000_000, 1.0)  # cap at ₹1L
-    score = _compute_risk_score(FraudPattern.FAN_OUT, magnitude, amount_norm)
+    score = _compute_risk_score(
+        FraudPattern.FAN_OUT, magnitude, amount_norm,
+        amount_paise=txn.amount_paise,
+    )
     verdict = _verdict_from_score(score)
 
     if verdict == RiskVerdict.CLEAR:
@@ -184,7 +202,10 @@ async def detect_fan_in(
     total_amount = sum(e.total_amount_paise for e in inbound)
     magnitude = min(count / (threshold * 3), 1.0)
     amount_norm = min(total_amount / 10_000_000, 1.0)
-    score = _compute_risk_score(FraudPattern.FAN_IN, magnitude, amount_norm)
+    score = _compute_risk_score(
+        FraudPattern.FAN_IN, magnitude, amount_norm,
+        amount_paise=txn.amount_paise,
+    )
     verdict = _verdict_from_score(score)
 
     if verdict == RiskVerdict.CLEAR:
@@ -259,7 +280,10 @@ async def detect_scatter_gather(
         / 10_000_000,
         1.0,
     )
-    score = _compute_risk_score(FraudPattern.SCATTER_GATHER, magnitude, amount_norm)
+    score = _compute_risk_score(
+        FraudPattern.SCATTER_GATHER, magnitude, amount_norm,
+        amount_paise=txn.amount_paise,
+    )
     verdict = _verdict_from_score(score)
 
     if verdict == RiskVerdict.CLEAR:

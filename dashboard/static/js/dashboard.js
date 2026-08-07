@@ -3,12 +3,14 @@
 // ── State ──────────────────────────────────────────────────────────────────────
 let ws = null, retryDelay = 1000, retryTimer = null;
 let isPaused = false, startTime = null, uptimeTimer = null;
-let allAlerts = [];          // full alert log
+let allAlerts = [];          // full alert log (newest first)
+let alertMap  = new Map();  // alert_id → alert object (O(1) lookup for detail modal)
 let patternCounts = {FAN_OUT:0, FAN_IN:0, SCATTER_GATHER:0, VELOCITY_ABUSE:0};
 let txnFeedCount = 0;
 let currentAlert = null;
-const MAX_TXN_ROWS = 40;
+const MAX_TXN_ROWS    = 40;
 const MAX_DETECT_ROWS = 50;
+const MAX_TABLE_ROWS  = 200;  // cap DOM rows — beyond this we only keep in allAlerts[]
 
 // ── Page Navigation ────────────────────────────────────────────────────────────
 function switchPage(name, btn) {
@@ -133,6 +135,7 @@ function appendTxn(msg) {
 // ── Alert Ingestion ────────────────────────────────────────────────────────────
 function ingestAlert(a) {
   allAlerts.unshift(a);
+  alertMap.set(a.alert_id, a);  // O(1) keyed store for detail modal
   patternCounts[a.pattern] = (patternCounts[a.pattern] || 0) + 1;
 
   // Update nav badge
@@ -150,15 +153,15 @@ function ingestAlert(a) {
   // Detection feed (monitor page)
   addDetectionRow(a);
 
-  // Alert table (alerts page)
-  rebuildTable();
+  // Alert table (alerts page) — O(1) incremental prepend, not O(n) rebuild
+  prependAlertRow(a);
 
   // Graph stats
   const blocked = allAlerts.filter(x => x.verdict === 'BLOCK').length;
   const flagged  = allAlerts.filter(x => x.verdict === 'FLAG').length;
   setText('gs-blocked', blocked);
   setText('gs-flagged',  flagged);
-  
+
   // Flash geomap if available
   if (window.GeoMap && a.accounts) {
     window.GeoMap.flashAlert(a.accounts);
@@ -184,7 +187,48 @@ function addDetectionRow(a) {
   while (feed.children.length > MAX_DETECT_ROWS) feed.removeChild(feed.lastChild);
 }
 
-// ── Alert Table ────────────────────────────────────────────────────────────────
+// ── Alert Table ───────────────────────────────────────────────────────────────────────
+
+/**
+ * Prepend a single row to the top of the alert table.
+ * O(1) DOM operation instead of O(n) full rebuild.
+ * Uses data-alert-id attribute + event delegation — no JSON in onclick.
+ */
+function prependAlertRow(a) {
+  const tbody = document.getElementById('alert-table-body');
+
+  // Remove the empty-state row on first real alert
+  const empty = tbody.querySelector('.table-empty');
+  if (empty) empty.parentElement.remove();
+
+  // Check active filters — if the new alert doesn't match, skip DOM insert
+  const pf = document.getElementById('alert-filter').value;
+  const vf = document.getElementById('verdict-filter').value;
+  const matchesPat = pf === 'all' || a.pattern === pf;
+  const matchesVrd = vf === 'all' || a.verdict === vf;
+
+  if (matchesPat && matchesVrd) {
+    const tr = document.createElement('tr');
+    tr.setAttribute('data-alert-id', a.alert_id);
+    tr.innerHTML = `
+      <td>${new Date(a.timestamp).toLocaleTimeString()}</td>
+      <td class="${patClass(a.pattern)}">${patLabel(a.pattern)}</td>
+      <td><span class="badge badge--${a.verdict.toLowerCase()}">${a.verdict}</span></td>
+      <td><span class="mono">${(a.score||0).toFixed(4)}</span></td>
+      <td><span class="mono">${fmt1(a.latency_ms)}ms</span></td>
+      <td>${(a.accounts||[]).length}</td>
+      <td><button class="detail-btn">View →</button></td>`;
+    tbody.insertBefore(tr, tbody.firstChild);
+
+    // Trim DOM to MAX_TABLE_ROWS — old rows are still in allAlerts[]
+    while (tbody.children.length > MAX_TABLE_ROWS) tbody.removeChild(tbody.lastChild);
+  }
+}
+
+/**
+ * Full table rebuild — only called when the user changes a filter dropdown.
+ * Reads from allAlerts[] which always holds the complete history.
+ */
 function rebuildTable() {
   const pf = document.getElementById('alert-filter').value;
   const vf = document.getElementById('verdict-filter').value;
@@ -198,17 +242,27 @@ function rebuildTable() {
     tbody.innerHTML = '<tr><td colspan="7" class="table-empty">No alerts match filter</td></tr>';
     return;
   }
-  tbody.innerHTML = filtered.map(a => `
-    <tr onclick="showAlert(${escJson(a)})">
+  tbody.innerHTML = filtered.slice(0, MAX_TABLE_ROWS).map(a => `
+    <tr data-alert-id="${esc(a.alert_id)}">
       <td>${new Date(a.timestamp).toLocaleTimeString()}</td>
       <td class="${patClass(a.pattern)}">${patLabel(a.pattern)}</td>
       <td><span class="badge badge--${a.verdict.toLowerCase()}">${a.verdict}</span></td>
       <td><span class="mono">${(a.score||0).toFixed(4)}</span></td>
       <td><span class="mono">${fmt1(a.latency_ms)}ms</span></td>
       <td>${(a.accounts||[]).length}</td>
-      <td><button class="detail-btn" onclick="event.stopPropagation();showAlert(${escJson(a)})">View →</button></td>
+      <td><button class="detail-btn">View →</button></td>
     </tr>`).join('');
 }
+
+// Delegated click listener on alert table body — no JSON in onclick attributes
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('alert-table-body').addEventListener('click', e => {
+    const tr = e.target.closest('tr[data-alert-id]');
+    if (!tr) return;
+    const a = alertMap.get(tr.dataset.alertId);
+    if (a) window.showAlert(a);
+  });
+});
 
 function filterAlerts() { rebuildTable(); }
 function setFilter(pattern) {
@@ -216,44 +270,11 @@ function setFilter(pattern) {
   rebuildTable();
 }
 
-// ── Alert Detail Modal ─────────────────────────────────────────────────────────
-function showAlert(a) {
-  const overlay = document.getElementById('modal-overlay');
-  const tag     = document.getElementById('modal-tag');
-  const title   = document.getElementById('modal-title');
-  const body    = document.getElementById('modal-body');
 
-  tag.textContent  = a.verdict;
-  tag.className    = 'modal-tag ' + a.verdict;
-  title.textContent = patLabel(a.pattern);
-
-  body.innerHTML = `
-    <div class="modal-section">
-      <div class="modal-section-title">Risk Score</div>
-      <div class="modal-score ${a.verdict}">${(a.score||0).toFixed(4)}</div>
-    </div>
-    <div class="modal-section">
-      <div class="modal-section-title">Detection</div>
-      <div class="modal-section-body">${fmt1(a.latency_ms)}ms · ${a.within_sla ? '✓ Within SLA (200ms)' : '✗ SLA breach'} · ${new Date(a.timestamp).toLocaleString()}</div>
-    </div>
-    <div class="modal-section">
-      <div class="modal-section-title">Causal Explanation</div>
-      <div class="modal-section-body">${esc(a.summary || '')}</div>
-    </div>
-    <div class="modal-section">
-      <div class="modal-section-title">Recommended Action</div>
-      <div class="modal-action-text">${esc(a.action || 'No action specified')}</div>
-    </div>
-    <div class="modal-section">
-      <div class="modal-section-title">Implicated Accounts (${(a.accounts||[]).length})</div>
-      <div class="modal-accounts">${(a.accounts||[]).map(ac => `<span class="account-chip">${ac}</span>`).join('')}</div>
-    </div>`;
-
-  overlay.classList.add('open');
-}
 
 function closeAlert() { document.getElementById('modal-overlay').classList.remove('open'); }
 function closeModal(e) { if (e.target === e.currentTarget) closeAlert(); }
+
 
 // ── Inject Modal ───────────────────────────────────────────────────────────────
 function openInjectModal()  { document.getElementById('inject-overlay').classList.add('open'); }

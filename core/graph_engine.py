@@ -321,25 +321,52 @@ class BehavioralGraphEngine:
         Sweep the entire graph and evict stale edges.
         Should be called periodically (e.g., every 30s) by a background task.
         Returns the number of edges removed.
+
+        Two-phase design to minimise lock hold time:
+          Phase 1 (read, lock-free): Evict old timestamps from deques.
+                  Deque mutation is safe because we only ever popleft().
+          Phase 2 (write, locked): Remove empty edge entries from the dicts.
+        This prevents eviction from blocking transaction ingestion on hot paths.
         """
         cutoff = time.time() - self._cfg.window_seconds
-        removed = 0
 
+        # Phase 1 — evict timestamps without holding the lock.
+        # Collect empty (sender, receiver) pairs to delete.
+        stale_pairs: list[tuple[str, str]] = []
         async with self._lock:
-            for sender_id in list(self._out_edges.keys()):
-                for receiver_id in list(self._out_edges[sender_id].keys()):
+            snapshot_keys = [
+                (s, r)
+                for s, receivers in self._out_edges.items()
+                for r in receivers
+            ]
+
+        for sender_id, receiver_id in snapshot_keys:
+            # Edge may have been deleted between phases — guard with get()
+            edge = self._out_edges.get(sender_id, {}).get(receiver_id)
+            if edge is not None:
+                edge.evict_before(cutoff)
+                if edge.is_empty:
+                    stale_pairs.append((sender_id, receiver_id))
+
+        if not stale_pairs:
+            return 0
+
+        # Phase 2 — delete empty edges under lock (fast O(stale) operation).
+        removed = 0
+        async with self._lock:
+            for sender_id, receiver_id in stale_pairs:
+                if receiver_id in self._out_edges.get(sender_id, {}):
                     edge = self._out_edges[sender_id][receiver_id]
-                    edge.evict_before(cutoff)
-                    if edge.is_empty:
+                    if edge.is_empty:   # re-check; may have received txn between phases
                         del self._out_edges[sender_id][receiver_id]
+                        if not self._out_edges[sender_id]:
+                            del self._out_edges[sender_id]
                         del self._in_edges[receiver_id][sender_id]
                         self._edge_count = max(0, self._edge_count - 1)
                         removed += 1
-                if not self._out_edges[sender_id]:
-                    del self._out_edges[sender_id]
 
         if removed:
-            logger.debug("Global eviction: removed %d stale edges", removed)
+            logger.debug("Global eviction: removed %d stale edges (two-phase)", removed)
         return removed
 
     # ─── Private Helpers ──────────────────────────────────────────────────────

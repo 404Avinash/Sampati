@@ -177,16 +177,18 @@ class StreamProcessor:
 
         # ── 5. BROADCAST transaction event (fire-and-forget) ─────────────────
         if self._broadcasters and self._total_processed % 5 == 0:
-            # Don't broadcast every single txn — every 5th is enough for UI
+            # Don't broadcast every single txn — every 5th is enough for UI.
+            # IMPORTANT: Use full IDs (not truncated) so the geo hashing function
+            # maps accounts to the same city as fraud_alert.accounts.
             snapshot = await self._graph.snapshot_for_dashboard()
             payload = {
-                "type":    "txn_tick",
-                "txn_id":  txn.txn_id,
-                "sender":  txn.sender_id[:12],
-                "receiver": txn.receiver_id[:12],
-                "amount":  txn.amount_rupees,
-                "graph":   snapshot,
-                "metrics": self._build_metrics_payload(),
+                "type":     "txn_tick",
+                "txn_id":   txn.txn_id,
+                "sender":   txn.sender_id,
+                "receiver": txn.receiver_id,
+                "amount":   txn.amount_rupees,
+                "graph":    snapshot,
+                "metrics":  self._build_metrics_payload(),
             }
             asyncio.create_task(self._broadcast(payload))
 
