@@ -163,4 +163,4 @@ window.GeoMap = (() => {
   return { init, updateTxn, flashAlert, resize };
 })();
 
-window.addEventListener('DOMContentLoaded', () => GeoMap.init());
+window.addEventListener('DOMContentLoaded', () => window.GeoMap.init());
