@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from typing import AsyncGenerator
 
 from core.models import FraudPattern, UPITransaction
-from emitter.distributions import MULE_ACCOUNT_POOL, LEGITIMATE_ACCOUNT_POOL
+from emitter.distributions import MULE_ACCOUNT_POOL, LEGITIMATE_ACCOUNT_POOL, MERCHANT_ACCOUNT_POOL, MULE_DORMANCY_TRANSACTIONS
 
 
 def _now() -> datetime:
@@ -47,6 +47,29 @@ def _make_txn(
     )
 
 
+def _make_warmup_txn(sender: str) -> UPITransaction:
+    """A normal-looking transaction from a mule account during its dormancy phase.
+    Small amount, goes to a merchant — looks like an everyday UPI payment."""
+    receiver = random.choice(MERCHANT_ACCOUNT_POOL)
+    amount = random.randint(5_000, 50_000)   # \u20b950 – \u20b9500 (small purchase)
+    return UPITransaction(
+        sender_id=sender,
+        receiver_id=receiver,
+        amount_paise=amount,
+        timestamp=_now(),
+        is_synthetic=True,
+        # No injected_pattern — these look legitimate in the graph history
+    )
+
+
+async def _warmup_mule(mule_id: str) -> None:
+    """Warm up a mule account with MULE_DORMANCY_TRANSACTIONS normal transactions.
+    Caller should yield these; defined separately to keep generator signatures clean."""
+    for _ in range(MULE_DORMANCY_TRANSACTIONS):
+        yield _make_warmup_txn(mule_id)
+        await asyncio.sleep(random.uniform(0.08, 0.4))
+
+
 # ─── Attack Scenario Generators ───────────────────────────────────────────────
 
 
@@ -54,44 +77,53 @@ async def generate_fan_out_attack(
     num_receivers: int | None = None,
 ) -> AsyncGenerator[UPITransaction, None]:
     """
-    Simulate a Fan-Out scatter attack:
-    A single mule account rapidly sends small amounts to N legitimate accounts.
+    Simulate a Fan-Out scatter attack.
 
-    Real-world context: A scammer who has received a large payment via social
-    engineering immediately disperses it across dozens of accounts to make
-    recovery impossible.
+    Phase 1 (Dormancy): The mule account makes N normal-looking small purchases.
+    Phase 2 (Attack):   The same account rapidly sends large amounts to many distinct
+                        receivers — the structural signature the detector catches.
+
+    The dormancy phase builds up a legitimate-looking behavioral history in the
+    graph engine so the detection is meaningful, not trivially obvious.
     """
-    n = num_receivers or random.randint(6, 15)
+    n = num_receivers or random.randint(6, 12)
     sender = random.choice(MULE_ACCOUNT_POOL)
     receivers = random.sample(LEGITIMATE_ACCOUNT_POOL, min(n, len(LEGITIMATE_ACCOUNT_POOL)))
+    amounts = [random.randint(50_000_00, 200_000_00) for _ in receivers]
 
-    # Amounts are small and variable — designed to stay below ₹50,000 reporting threshold
-    amounts = [random.randint(5_000_00, 49_000_00) for _ in receivers]
+    # Phase 1: dormancy warmup
+    async for txn in _warmup_mule(sender):
+        yield txn
 
+    # Phase 2: rapid fan-out scatter
     for receiver, amount in zip(receivers, amounts):
         yield _make_txn(sender, receiver, amount, FraudPattern.FAN_OUT)
-        # Very short inter-arrival — the hallmark of automated tooling
-        await asyncio.sleep(random.uniform(0.05, 0.3))
+        await asyncio.sleep(random.uniform(0.05, 0.25))
 
 
 async def generate_fan_in_attack(
     num_senders: int | None = None,
 ) -> AsyncGenerator[UPITransaction, None]:
     """
-    Simulate a Fan-In mule aggregation attack:
-    Multiple feeder accounts funnel funds into a single mule collector.
+    Simulate a Fan-In mule aggregation attack.
 
-    Real-world context: Multiple low-value scam victims each send small amounts
-    to a "lottery prize" or "customs fee" account, which is the mule.
+    Phase 1 (Dormancy): The collector mule account makes a few normal purchases
+                        to establish a behavioral baseline in the graph.
+    Phase 2 (Attack):   Multiple feeder accounts rapidly send funds to the same collector.
     """
-    n = num_senders or random.randint(5, 12)
+    n = num_senders or random.randint(5, 10)
     collector = random.choice(MULE_ACCOUNT_POOL)
     senders = random.sample(LEGITIMATE_ACCOUNT_POOL, min(n, len(LEGITIMATE_ACCOUNT_POOL)))
-    amounts = [random.randint(2_000_00, 25_000_00) for _ in senders]
+    amounts = [random.randint(5_000_00, 30_000_00) for _ in senders]
 
+    # Phase 1: collector makes normal transactions to look legitimate
+    async for txn in _warmup_mule(collector):
+        yield txn
+
+    # Phase 2: fan-in attack
     for sender, amount in zip(senders, amounts):
         yield _make_txn(sender, collector, amount, FraudPattern.FAN_IN)
-        await asyncio.sleep(random.uniform(0.1, 0.8))
+        await asyncio.sleep(random.uniform(0.1, 0.6))
 
 
 async def generate_scatter_gather_attack(

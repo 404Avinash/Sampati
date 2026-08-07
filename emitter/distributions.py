@@ -107,7 +107,16 @@ HOURLY_LOAD_MULTIPLIERS: dict[int, float] = {
 
 
 def current_load_multiplier() -> float:
-    """Return the traffic load multiplier for the current IST hour."""
+    """Return the traffic load multiplier for the current IST hour.
+
+    In SYNTHETIC / DEMO mode this always returns 1.0 — the emitter should
+    run at constant configured TPS regardless of wall-clock time.  A demo
+    running at 2 am IST should not throttle to 3% TPS.
+    """
+    # Import here to avoid circular dependency
+    from config.settings import settings  # noqa: PLC0415
+    if settings.app.env.value != "production":
+        return 1.0   # constant TPS in dev / staging / demo
     # IST = UTC+5:30
     hour_ist = (datetime.now(timezone.utc).hour + 5) % 24
     return HOURLY_LOAD_MULTIPLIERS.get(hour_ist, 0.5)
@@ -126,7 +135,18 @@ def generate_account_pool(size: int, prefix: str = "ACC") -> list[str]:
     ]
 
 
-# Pre-generated pools for the emitter to sample from
-LEGITIMATE_ACCOUNT_POOL: list[str] = generate_account_pool(5000, prefix="LEG")
-MULE_ACCOUNT_POOL: list[str]       = generate_account_pool(200,  prefix="MUL")
-MERCHANT_ACCOUNT_POOL: list[str]   = generate_account_pool(500,  prefix="MRC")
+# Pre-generated pools for the emitter to sample from.
+# DESIGN: mule accounts are drawn from the SAME pool as legitimate accounts
+# so that they look completely normal until they activate. This produces
+# organic fraud emergence rather than obviously synthetic injections.
+#
+# The emitter gives mule accounts a "dormancy" window: for the first
+# MULE_DORMANCY_TRANSACTIONS transactions, they behave like regular users
+# (small P2M payments, recharges). After that, they activate.
+LEGITIMATE_ACCOUNT_POOL: list[str] = generate_account_pool(800, prefix="USR")
+MULE_ACCOUNT_POOL: list[str]       = generate_account_pool(60,  prefix="USR")  # overlaps namespace
+MERCHANT_ACCOUNT_POOL: list[str]   = generate_account_pool(200, prefix="MRC")
+
+# How many "normal" transactions a mule account makes before activating.
+# This makes the account look legitimate in the graph history before the attack.
+MULE_DORMANCY_TRANSACTIONS: int = 8

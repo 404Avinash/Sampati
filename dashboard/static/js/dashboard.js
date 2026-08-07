@@ -51,10 +51,16 @@ function route(msg) {
       updateMetrics(msg.metrics);
       if (msg.recent_alerts) msg.recent_alerts.slice().reverse().forEach(ingestAlert);
       break;
+    case 'geo_tick':
+      // Lightweight map-only update — fires on EVERY transaction for a live map
+      if (window.GeoMap) window.GeoMap.updateTxn(msg);
+      break;
     case 'txn_tick':
+      // Full update (every 5th txn) — graph snapshot + metrics + feed
       if (msg.graph) GraphVis.update(msg.graph);
       if (msg.metrics) updateMetrics(msg.metrics);
       appendTxn(msg);
+      // Also update geo map from txn_tick (in case geo_tick was missed)
       if (window.GeoMap) window.GeoMap.updateTxn(msg);
       break;
     case 'fraud_alert':
@@ -66,6 +72,7 @@ function route(msg) {
       break;
   }
 }
+
 
 // ── Metrics ────────────────────────────────────────────────────────────────────
 function updateMetrics(m) {

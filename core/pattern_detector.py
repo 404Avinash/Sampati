@@ -406,16 +406,27 @@ class PatternDetectorRegistry:
         """
         detection_start = time.time()
 
+        # return_exceptions=True isolates per-detector failures.
+        # A crashing detector logs an error but does NOT crash the pipeline.
         results = await asyncio.gather(
             *[fn(txn, graph, detection_start) for _, fn in self._detectors],
-            return_exceptions=False,
+            return_exceptions=True,
         )
 
-        alerts = [r for r in results if r is not None]
+        alerts: list[FraudAlert] = []
+        for name_fn, result in zip(self._detectors, results):
+            name, _ = name_fn
+            if isinstance(result, Exception):
+                logger.error(
+                    "Detector '%s' raised an exception for txn %s: %s",
+                    name, txn.txn_id[:8], result, exc_info=result,
+                )
+            elif result is not None:
+                alerts.append(result)
 
         if alerts:
             logger.info(
-                "🚨 %d alert(s) for txn %s: %s",
+                "\U0001f6a8 %d alert(s) for txn %s: %s",
                 len(alerts),
                 txn.txn_id[:8],
                 [a.pattern for a in alerts],

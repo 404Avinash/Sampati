@@ -175,22 +175,34 @@ class StreamProcessor:
         self._throughput_counter.record(1)
         self._total_processed += 1
 
-        # ── 5. BROADCAST transaction event (fire-and-forget) ─────────────────
-        if self._broadcasters and self._total_processed % 5 == 0:
-            # Don't broadcast every single txn — every 5th is enough for UI.
-            # IMPORTANT: Use full IDs (not truncated) so the geo hashing function
-            # maps accounts to the same city as fraud_alert.accounts.
-            snapshot = await self._graph.snapshot_for_dashboard()
-            payload = {
-                "type":     "txn_tick",
-                "txn_id":   txn.txn_id,
+        # ── 5. BROADCAST (fire-and-forget, two tiers) ─────────────────────────
+        if self._broadcasters:
+            # Tier A — Lightweight geo arc payload, EVERY transaction.
+            # Keeps the geo map alive at full TPS with minimal overhead.
+            # Uses full IDs so the geo hash maps accounts consistently with fraud_alert.accounts.
+            geo_payload = {
+                "type":     "geo_tick",
                 "sender":   txn.sender_id,
                 "receiver": txn.receiver_id,
                 "amount":   txn.amount_rupees,
-                "graph":    snapshot,
-                "metrics":  self._build_metrics_payload(),
             }
-            asyncio.create_task(self._broadcast(payload))
+            asyncio.create_task(self._broadcast(geo_payload))
+
+            # Tier B — Full txn_tick with graph snapshot + metrics, every 5th txn.
+            # The graph snapshot is expensive (sorts 200 nodes); no need to do it per-txn.
+            if self._total_processed % 5 == 0:
+                snapshot = await self._graph.snapshot_for_dashboard()
+                payload = {
+                    "type":     "txn_tick",
+                    "txn_id":   txn.txn_id,
+                    "sender":   txn.sender_id,
+                    "receiver": txn.receiver_id,
+                    "amount":   txn.amount_rupees,
+                    "graph":    snapshot,
+                    "metrics":  self._build_metrics_payload(),
+                }
+                asyncio.create_task(self._broadcast(payload))
+
 
     async def _handle_alert(self, alert: FraudAlert) -> None:
         """Process a fraud alert: update graph, enrich, log, broadcast."""
