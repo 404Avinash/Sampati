@@ -50,6 +50,8 @@ class AppSettings(BaseSettings):
     log_level: LogLevel = LogLevel.INFO
     host: str = "0.0.0.0"
     port: int = Field(default=8000, ge=1024, le=65535)
+    redis_url: str = "redis://localhost:6379/0"
+    kafka_bootstrap: str = "localhost:9092"
 
 
 class EmitterSettings(BaseSettings):

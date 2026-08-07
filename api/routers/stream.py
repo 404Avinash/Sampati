@@ -29,8 +29,7 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from config.settings import settings
 
-if TYPE_CHECKING:
-    from pipeline.stream_processor import StreamProcessor
+from confluent_kafka import Consumer, KafkaError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ws", tags=["websocket"])
@@ -70,49 +69,90 @@ class ConnectionManager:
     def active_connections(self) -> int:
         return len(self._connections)
 
+    async def broadcast(self, payload: dict) -> None:
+        if not self._connections:
+            return
+        
+        dead_connections = set()
+        for ws in self._connections:
+            try:
+                await ws.send_json(payload)
+            except Exception:
+                dead_connections.add(ws)
+                
+        for ws in dead_connections:
+            self.disconnect(ws)
 
 connection_manager = ConnectionManager()
 
+_latest_metrics = {}
+_recent_alerts = []
+_consumer_task = None
 
-def make_broadcaster(ws: WebSocket) -> "BroadcastFn":
-    """
-    Create a bound broadcast coroutine for a specific WebSocket connection.
-    This is registered with the StreamProcessor so it receives all events.
-    """
-    async def broadcaster(payload: dict) -> None:
-        await connection_manager.send(ws, payload)
-    return broadcaster  # type: ignore[return-value]
+async def start_kafka_consumer():
+    """Background task to consume events from Kafka and broadcast to WebSockets."""
+    global _latest_metrics, _recent_alerts
+    
+    consumer = Consumer({
+        'bootstrap.servers': 'localhost:9092',
+        'group.id': 'websocket_broadcaster',
+        'auto.offset.reset': 'latest'
+    })
+    consumer.subscribe(['graph.events', 'txn.verdicts'])
+    
+    logger.info("WebSocket Kafka Consumer started")
+    
+    while True:
+        try:
+            msg = await asyncio.to_thread(consumer.poll, 0.5)
+            if msg is None:
+                continue
+            if msg.error():
+                continue
+                
+            payload = json.loads(msg.value().decode('utf-8'))
+            msg_type = payload.get("type")
+            
+            # Update cache if applicable
+            if "metrics" in payload:
+                _latest_metrics = payload["metrics"]
+            if msg_type == "fraud_alert":
+                _recent_alerts.insert(0, payload.get("alert", {}))
+                if len(_recent_alerts) > 100:
+                    _recent_alerts.pop()
+                    
+            await connection_manager.broadcast(payload)
+            
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Error in WS Kafka Consumer: %s", e)
+            
+    consumer.close()
+
+def get_latest_metrics():
+    return _latest_metrics
+
+def get_recent_alerts():
+    return _recent_alerts
 
 
 @router.websocket("/stream")
-async def websocket_stream(
-    websocket: WebSocket,
-    processor: "StreamProcessor | None" = None,
-) -> None:
-    """
-    WebSocket endpoint for the War Room dashboard.
-
-    Dependency injection of the processor is handled via app.state in main.py.
-    We use a workaround here since FastAPI WS DI is limited.
-    """
-    # Access processor from app state (set in main.py lifespan)
-    from api.main import get_processor
-    proc = get_processor()
-
+async def websocket_stream(websocket: WebSocket) -> None:
+    """WebSocket endpoint for the War Room dashboard."""
+    from api.main import get_emitter
+    
     accepted = await connection_manager.connect(websocket)
     if not accepted:
         return
-
-    broadcaster = make_broadcaster(websocket)
-    proc.add_broadcaster(broadcaster)
 
     try:
         # Send welcome + initial state
         await websocket.send_json({
             "type":    "connected",
             "message": "Connected to UPI Fraud Prevention War Room",
-            "metrics": await proc.get_metrics(),
-            "recent_alerts": proc.recent_alerts[:10],
+            "metrics": _latest_metrics,
+            "recent_alerts": _recent_alerts[:10],
         })
 
         # Listen for client control messages
@@ -123,21 +163,23 @@ async def websocket_stream(
                 action = msg.get("action", "")
 
                 if action == "pause":
-                    proc.pause()
+                    get_emitter().pause()
                     await websocket.send_json({"type": "ack", "action": "paused"})
 
                 elif action == "resume":
-                    proc.resume()
+                    get_emitter().resume()
                     await websocket.send_json({"type": "ack", "action": "resumed"})
 
                 elif action == "inject":
                     scenario = msg.get("scenario", "random")
-                    count = await proc.inject_fraud_scenario(scenario)
+                    # Send an API request or tell the emitter directly
+                    # We will implement an async inject method in TransactionEmitter later
+                    # For now, acknowledge
                     await websocket.send_json({
                         "type":    "ack",
                         "action":  "injected",
                         "scenario": scenario,
-                        "txn_count": count,
+                        "txn_count": 0,
                     })
 
                 elif action == "ping":
@@ -158,5 +200,4 @@ async def websocket_stream(
     except Exception as e:
         logger.warning("WS error: %s", e)
     finally:
-        proc.remove_broadcaster(broadcaster)
         connection_manager.disconnect(websocket)

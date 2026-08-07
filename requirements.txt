@@ -1,9 +1,11 @@
 # ── Web Framework & API ────────────────────────────────────────────────────────
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
+gunicorn>=21.0.0
 pydantic>=2.7.0
 pydantic-settings>=2.3.0
 websockets>=12.0
+slowapi>=0.1.9
 
 # ── Async & HTTP ───────────────────────────────────────────────────────────────
 httpx>=0.27.0
@@ -14,21 +16,37 @@ networkx>=3.3              # Optional: for advanced graph algorithms
 numpy>=1.26.0
 pandas>=2.2.0
 
-# ── Machine Learning ───────────────────────────────────────────────────────────
-scikit-learn>=1.5.0
-xgboost>=2.0.0
+# ── Machine Learning (Removed to save space) ───────────────────────────────────
+# scikit-learn>=1.5.0
+# xgboost>=2.0.0
 joblib>=1.4.0
+
+# ── Redis, Kafka & Neo4j ───────────────────────────────────────────────────
+redis>=5.0.0
+confluent-kafka>=2.3.0
+neo4j>=5.21.0
+
+# ── Observability & Logging ────────────────────────────────────────────────────
+structlog>=24.1.0
+prometheus-fastapi-instrumentator>=7.0.0
+prometheus-client>=0.20.0
+opentelemetry-distro>=0.46b0
+opentelemetry-exporter-otlp>=1.25.0
+opentelemetry-instrumentation-fastapi>=0.46b0
+opentelemetry-instrumentation-redis>=0.46b0
+opentelemetry-instrumentation-confluent-kafka>=0.46b0
 
 # ── Utilities ──────────────────────────────────────────────────────────────────
 python-dotenv>=1.0.0
 rich>=13.7.0               # Beautiful CLI output
 tqdm>=4.66.0
 
-# ── Testing ────────────────────────────────────────────────────────────────────
+# ── Testing & Benchmarking ───────────────────────────────────────────────────
 pytest>=8.2.0
 pytest-asyncio>=0.23.0
 pytest-cov>=5.0.0
 httpx>=0.27.0              # For FastAPI TestClient
+locust>=2.29.0
 
 # ── Dev / Linting (not installed in production) ────────────────────────────────
 # ruff>=0.4.0

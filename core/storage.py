@@ -37,7 +37,22 @@ class GraphStore(Protocol):
     ) -> tuple[AccountNode, AccountNode]:
         """
         Record a directed edge and return the updated sender and receiver nodes.
-        Must be atomic if supported by the backend.
+        """
+        ...
+
+    async def check_and_add_edge(
+        self,
+        sender_id: str,
+        receiver_id: str,
+        amount_paise: int,
+        txn_id: str,
+        ts: datetime,
+        window_seconds: int,
+    ) -> tuple[AccountNode, AccountNode, int, int]:
+        """
+        Atomically add an edge and return the nodes plus the sender's out-degree 
+        and receiver's in-degree within the sliding window.
+        Returns: (sender_node, receiver_node, out_degree, in_degree)
         """
         ...
 
@@ -122,7 +137,50 @@ class InMemoryGraphStore(GraphStore):
             self._edge_count += 1
 
             # Return a copy to prevent downstream mutation issues
-            return sender.model_copy(deep=True), receiver.model_copy(deep=True)
+    async def check_and_add_edge(
+        self,
+        sender_id: str,
+        receiver_id: str,
+        amount_paise: int,
+        txn_id: str,
+        ts: datetime,
+        window_seconds: int,
+    ) -> tuple[AccountNode, AccountNode, int, int]:
+        async with self._lock:
+            cutoff = ts.timestamp() - window_seconds
+            
+            # 1. Upsert Sender
+            if sender_id not in self._nodes:
+                self._nodes[sender_id] = AccountNode(account_id=sender_id, first_seen=ts)
+            sender = self._nodes[sender_id]
+            sender.last_seen = ts
+            
+            # 2. Upsert Receiver
+            if receiver_id not in self._nodes:
+                self._nodes[receiver_id] = AccountNode(account_id=receiver_id, first_seen=ts)
+            receiver = self._nodes[receiver_id]
+            receiver.last_seen = ts
+
+            # 3. Create Edges
+            out_edge = Edge(txn_id=txn_id, target_id=receiver_id, amount_paise=amount_paise, timestamp=ts)
+            in_edge = Edge(txn_id=txn_id, target_id=sender_id, amount_paise=amount_paise, timestamp=ts)
+
+            # 4. Update Node State
+            sender.out_edges.append(out_edge)
+            sender.outbound_count += 1
+            sender.total_sent_paise += amount_paise
+
+            receiver.in_edges.append(in_edge)
+            receiver.inbound_count += 1
+            receiver.total_received_paise += amount_paise
+
+            self._edge_count += 1
+            
+            # Calculate degrees in window
+            out_degree = len({e.target_id for e in sender.out_edges if e.timestamp.timestamp() >= cutoff})
+            in_degree = len({e.target_id for e in receiver.in_edges if e.timestamp.timestamp() >= cutoff})
+
+            return sender.model_copy(deep=True), receiver.model_copy(deep=True), out_degree, in_degree
 
     async def get_out_edges(self, account_id: str) -> list[Edge]:
         async with self._lock:

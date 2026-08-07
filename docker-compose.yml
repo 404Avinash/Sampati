@@ -1,21 +1,115 @@
 version: '3.8'
 
 services:
-  n8n:
-    image: docker.n8n.io/n8nio/n8n
-    container_name: n8n_sih
+  api:
+    build: 
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: decode_api
     ports:
-      - "5678:5678"
+      - "8000:8000"
     environment:
-      - N8N_HOST=localhost
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - NODE_ENV=production
-      - WEBHOOK_URL=http://localhost:5678/
-      - GENERIC_TIMEZONE=Asia/Kolkata
-    volumes:
-      - n8n_data:/home/node/.n8n
-    restart: unless-stopped
+      - APP_ENV=production
+      - APP_REDIS_URL=redis://redis:6379/0
+      - APP_KAFKA_BOOTSTRAP=redpanda:9092
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=decode_api
+    depends_on:
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_started
 
-volumes:
-  n8n_data:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: decode_worker
+    environment:
+      - APP_ENV=production
+      - APP_REDIS_URL=redis://redis:6379/0
+      - APP_KAFKA_BOOTSTRAP=redpanda:9092
+      - KAFKA_BROKERS=redpanda:9092
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=decode_worker
+    depends_on:
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_started
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: decode_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: decode_redpanda
+    command:
+      - redpanda
+      - start
+      - --smp 1
+      - --memory 1G
+      - --reserve-memory 0M
+      - --overprovisioned
+      - --node-id 0
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+      - --pandaproxy-addr 0.0.0.0:8082
+      - --advertise-pandaproxy-addr localhost:8082
+    ports:
+      - "9092:9092"
+      - "8082:8082"
+      - "9644:9644"
+
+  prometheus:
+    image: prom/prometheus:v2.53.1
+    container_name: decode_prometheus
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: decode_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+
+  memgraph:
+    image: memgraph/memgraph-mage:latest
+    container_name: decode_memgraph
+    ports:
+      - "7687:7687"
+      - "7444:7444"
+
+  archiver:
+    build:
+      context: .
+      dockerfile: Dockerfile.archiver
+    container_name: decode_archiver
+    environment:
+      - KAFKA_BROKERS=redpanda:9092
+      - NEO4J_URI=bolt://memgraph:7687
+    depends_on:
+      - redpanda
+      - memgraph
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: decode_jaeger
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"

@@ -38,7 +38,8 @@ from typing import TYPE_CHECKING, Callable, Coroutine
 from config.settings import settings
 from core.explainability import build_rich_explanation, format_audit_log_line
 from core.graph_engine import BehavioralGraphEngine
-from core.storage import InMemoryGraphStore
+from core.storage import InMemoryGraphStore, GraphStore
+from core.redis_store import RedisGraphStore
 from core.models import (
     FraudAlert,
     PipelineMetrics,
@@ -49,6 +50,7 @@ from core.models import (
 from core.pattern_detector import detector_registry
 from emitter.transaction_emitter import TransactionEmitter
 from pipeline.metrics import LatencyTracker, ThroughputCounter
+import core.metrics as prom_metrics
 
 if TYPE_CHECKING:
     pass
@@ -71,8 +73,10 @@ class StreamProcessor:
         await task
     """
 
-    def __init__(self) -> None:
-        store = InMemoryGraphStore()
+    def __init__(self, store: GraphStore = None) -> None:
+        if store is None:
+            store = InMemoryGraphStore()
+                
         self._graph     = BehavioralGraphEngine(store=store)
         self._emitter   = TransactionEmitter()
         self._running   = False
@@ -163,11 +167,13 @@ class StreamProcessor:
         """Execute the full processing pipeline for a single transaction."""
         ingest_start = time.time()
 
-        # ── 1. GRAPH: Add to behavioral graph ────────────────────────────────
-        await self._graph.add_transaction(txn)
+        # ── 1. GRAPH: Add to behavioral graph (Atomically get degrees) ───────
+        out_degree, in_degree = await self._graph.check_and_add_transaction(txn, settings.graph.window_seconds)
 
         # ── 2. DETECT: Run all pattern detectors concurrently ────────────────
-        alerts: list[FraudAlert] = await detector_registry.run_all(txn, self._graph)
+        alerts: list[FraudAlert] = await detector_registry.run_all(
+            txn, self._graph, out_degree, in_degree
+        )
 
         # ── 3. PROCESS ALERTS ────────────────────────────────────────────────
         for alert in alerts:
@@ -178,6 +184,8 @@ class StreamProcessor:
         self._latency_tracker.record(latency_ms)
         self._throughput_counter.record(1)
         self._total_processed += 1
+        
+        prom_metrics.TXN_PROCESSED_TOTAL.inc()
 
         # ── 5. BROADCAST (fire-and-forget, two tiers) ─────────────────────────
         if self._broadcasters:
@@ -195,17 +203,21 @@ class StreamProcessor:
             # Tier B — Full txn_tick with graph snapshot + metrics, every 5th txn.
             # The graph snapshot is expensive (sorts 200 nodes); no need to do it per-txn.
             if self._total_processed % 5 == 0:
-                snapshot = await self._graph.snapshot_for_dashboard()
-                payload = {
-                    "type":     "txn_tick",
-                    "txn_id":   txn.txn_id,
-                    "sender":   txn.sender_id,
-                    "receiver": txn.receiver_id,
-                    "amount":   txn.amount_rupees,
-                    "graph":    snapshot,
-                    "metrics":  await self.get_metrics(),
-                }
-                asyncio.create_task(self._broadcast(payload))
+                asyncio.create_task(self._broadcast_snapshot(txn))
+
+    async def _broadcast_snapshot(self, txn: UPITransaction) -> None:
+        """Fetch snapshot and metrics asynchronously without blocking the main pipeline."""
+        snapshot = await self._graph.snapshot_for_dashboard()
+        payload = {
+            "type":     "txn_tick",
+            "txn_id":   txn.txn_id,
+            "sender":   txn.sender_id,
+            "receiver": txn.receiver_id,
+            "amount":   txn.amount_rupees,
+            "graph":    snapshot,
+            "metrics":  await self.get_metrics(),
+        }
+        await self._broadcast(payload)
 
 
     async def _handle_alert(self, alert: FraudAlert) -> None:
@@ -230,6 +242,13 @@ class StreamProcessor:
 
         # Write to forensic audit log
         logger.warning(format_audit_log_line(alert))
+        
+        prom_metrics.record_verdict(
+            pattern=alert.pattern.value,
+            verdict=alert.verdict.value,
+            latency_ms=alert.detection_latency_ms,
+            within_sla=alert.within_sla
+        )
 
         # Cache for dashboard initial-state queries
         self._recent_alerts.appendleft(dashboard_payload)
@@ -320,26 +339,19 @@ class StreamProcessor:
     async def inject_fraud_scenario(self, scenario: str = "random") -> int:
         """
         Manually inject a fraud scenario. Called by the /inject-fraud API endpoint.
+        Supports: fan_out, fan_in, scatter_gather, velocity, mule_chain, round_trip, random
         Returns the number of transactions injected.
         """
         from emitter.fraud_injector import (
-            ATTACK_GENERATORS,
-            generate_fan_in_attack,
-            generate_fan_out_attack,
-            generate_scatter_gather_attack,
-            generate_velocity_abuse_attack,
+            MANUAL_ATTACK_GENERATORS,
             random_attack,
         )
 
-        scenario_map = {
-            "fan_out":        generate_fan_out_attack,
-            "fan_in":         generate_fan_in_attack,
-            "scatter_gather": generate_scatter_gather_attack,
-            "velocity":       generate_velocity_abuse_attack,
-            "random":         random_attack,
-        }
+        if scenario == "random":
+            gen_fn = random_attack
+        else:
+            gen_fn = MANUAL_ATTACK_GENERATORS.get(scenario, random_attack)
 
-        gen_fn = scenario_map.get(scenario, random_attack)
         count = 0
         async for txn in gen_fn():
             await self._process_transaction(txn)

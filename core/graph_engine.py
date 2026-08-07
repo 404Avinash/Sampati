@@ -80,15 +80,32 @@ class BehavioralGraphEngine:
 
     async def add_transaction(self, txn: UPITransaction) -> None:
         """
-        Ingest a transaction into the graph by delegating to the GraphStore.
+        Ingest a new transaction and update the behavioral graph state.
+        Handles creating nodes if they don't exist and appending edges.
         """
         await self.store.add_edge(
             sender_id=txn.sender_id,
             receiver_id=txn.receiver_id,
             amount_paise=txn.amount_paise,
             txn_id=txn.txn_id,
-            ts=txn.timestamp
+            ts=txn.timestamp,
         )
+        
+    async def check_and_add_transaction(self, txn: UPITransaction, window_seconds: int) -> tuple[int, int]:
+        """
+        Ingest a new transaction atomically, and return the sender's out-degree 
+        and receiver's in-degree in the current window.
+        Returns: (out_degree, in_degree)
+        """
+        _, _, out_degree, in_degree = await self.store.check_and_add_edge(
+            sender_id=txn.sender_id,
+            receiver_id=txn.receiver_id,
+            amount_paise=txn.amount_paise,
+            txn_id=txn.txn_id,
+            ts=txn.timestamp,
+            window_seconds=window_seconds,
+        )
+        return out_degree, in_degree
         
         # Evict stale edges periodically
         cutoff = datetime.fromtimestamp(txn.timestamp.timestamp() - self._cfg.window_seconds, tz=txn.timestamp.tzinfo)
