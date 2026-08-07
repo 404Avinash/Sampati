@@ -221,9 +221,10 @@ function prependAlertRow(a) {
       <td>${new Date(a.timestamp).toLocaleTimeString()}</td>
       <td class="${patClass(a.pattern)}">${patLabel(a.pattern)}</td>
       <td><span class="badge badge--${a.verdict.toLowerCase()}">${a.verdict}</span></td>
-      <td><span class="mono">${(a.score||0).toFixed(4)}</span></td>
-      <td><span class="mono">${fmt1(a.latency_ms)}ms</span></td>
-      <td>${(a.accounts||[]).length}</td>
+      <td><span class="mono">${(a.risk_score || a.score || 0).toFixed(4)}</span></td>
+      <td><span class="mono">${fmt1(a.latency_ms || a.detection_latency_ms)}ms</span></td>
+      <td class="text-sm opacity-80">${esc(a.explanation_text || a.summary || '')}</td>
+      <td><code class="cypher-code">${esc(a.explanation_cypher || 'N/A')}</code></td>
       <td><button class="detail-btn">View →</button></td>`;
     tbody.insertBefore(tr, tbody.firstChild);
 
@@ -246,7 +247,7 @@ function rebuildTable() {
 
   const tbody = document.getElementById('alert-table-body');
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="table-empty">No alerts match filter</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="table-empty">No interventions match filter</td></tr>';
     return;
   }
   tbody.innerHTML = filtered.slice(0, MAX_TABLE_ROWS).map(a => `
@@ -254,9 +255,10 @@ function rebuildTable() {
       <td>${new Date(a.timestamp).toLocaleTimeString()}</td>
       <td class="${patClass(a.pattern)}">${patLabel(a.pattern)}</td>
       <td><span class="badge badge--${a.verdict.toLowerCase()}">${a.verdict}</span></td>
-      <td><span class="mono">${(a.score||0).toFixed(4)}</span></td>
-      <td><span class="mono">${fmt1(a.latency_ms)}ms</span></td>
-      <td>${(a.accounts||[]).length}</td>
+      <td><span class="mono">${(a.risk_score || a.score || 0).toFixed(4)}</span></td>
+      <td><span class="mono">${fmt1(a.latency_ms || a.detection_latency_ms)}ms</span></td>
+      <td class="text-sm opacity-80">${esc(a.explanation_text || a.summary || '')}</td>
+      <td><code class="cypher-code">${esc(a.explanation_cypher || 'N/A')}</code></td>
       <td><button class="detail-btn">View →</button></td>
     </tr>`).join('');
 }

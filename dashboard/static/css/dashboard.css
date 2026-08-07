@@ -372,3 +372,19 @@ body{display:grid;grid-template-columns:var(--sidebar-w) 1fr;height:100vh}
 
 /* ── Misc ── */
 .empty-msg{color:var(--text-3);font-size:12px;padding:20px 0;text-align:center}
+
+/* Decision Transparency Utility Classes */
+.text-sm { font-size: 0.875rem; }
+.opacity-80 { opacity: 0.8; }
+.cypher-code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  background-color: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: #38bdf8;
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

@@ -1,0 +1,140 @@
+/* 
+ * decode_sih / d3-graph.css
+ * ──────────────────────────────────────
+ * Styling for the D3.js Force-Directed Graph 
+ */
+
+#d3-graph-container {
+  width: 100%;
+  height: 100%;
+  min-height: 500px;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+}
+
+#d3-graph-svg {
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+#d3-graph-svg:active {
+  cursor: grabbing;
+}
+
+/* ─── Links (Edges) ──────────────────────────────────────────────────────── */
+
+.d3-link {
+  stroke: rgba(148, 163, 184, 0.3); /* Slate 400 with opacity */
+  stroke-width: 1.5px;
+  transition: stroke 0.3s ease;
+}
+
+/* ─── Nodes ─────────────────────────────────────────────────────────────── */
+
+.d3-node {
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 2px;
+  transition: fill 0.3s ease, filter 0.3s ease, stroke 0.3s ease;
+}
+
+.d3-node:hover {
+  stroke: rgba(255, 255, 255, 0.8);
+  stroke-width: 3px;
+}
+
+/* Node States */
+.d3-node--normal {
+  fill: #3b82f6; /* Blue 500 */
+}
+
+.d3-node--flagged {
+  fill: #f59e0b; /* Amber 500 */
+  stroke: rgba(245, 158, 11, 0.5);
+  filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.6));
+}
+
+.d3-node--blocked {
+  fill: #ef4444; /* Red 500 */
+  stroke: rgba(239, 68, 68, 0.5);
+  filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.8));
+  animation: pulse-block 2s infinite;
+}
+
+@keyframes pulse-block {
+  0% { filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.6)); }
+  50% { filter: drop-shadow(0 0 16px rgba(239, 68, 68, 1)); }
+  100% { filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.6)); }
+}
+
+/* ─── Node Labels (Optional) ─────────────────────────────────────────────── */
+
+.d3-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  fill: var(--color-text-dim);
+  pointer-events: none;
+  text-anchor: middle;
+  text-shadow: 
+    -1px -1px 0 var(--color-surface),  
+     1px -1px 0 var(--color-surface),
+    -1px  1px 0 var(--color-surface),
+     1px  1px 0 var(--color-surface);
+}
+
+/* ─── D3 Tooltip ────────────────────────────────────────────────────────── */
+
+.d3-tooltip {
+  position: absolute;
+  text-align: left;
+  padding: 12px;
+  font-size: 12px;
+  background: rgba(15, 23, 42, 0.95); /* Slate 900 */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+.d3-tooltip-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--color-text-dim);
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.d3-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.d3-tooltip-row:last-child {
+  margin-bottom: 0;
+}
+
+.d3-tooltip-label {
+  color: var(--color-text-dim);
+}
+
+.d3-tooltip-value {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.d3-tooltip-value.blocked {
+  color: #ef4444;
+}
+.d3-tooltip-value.flagged {
+  color: #f59e0b;
+}

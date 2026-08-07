@@ -9,6 +9,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/dashboard.css" />
+  <link rel="stylesheet" href="/static/css/d3-graph.css" />
+  <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 <body>
 
@@ -40,7 +42,7 @@
       </button></li>
       <li><button class="nav-item" role="tab" data-page="alerts" onclick="switchPage('alerts', this)">
         <svg viewBox="0 0 20 20" fill="none"><path d="M10 2L2 16h16L10 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><line x1="10" y1="9" x2="10" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="14" r="0.8" fill="currentColor"/></svg>
-        <span>Alerts</span>
+        <span>Decision Transparency</span>
         <span class="nav-badge" id="nav-alert-count">0</span>
       </button></li>
       <li><button class="nav-item" role="tab" data-page="graph" onclick="switchPage('graph', this)">
@@ -152,12 +154,12 @@
       </div>
     </section>
 
-    <!-- ── PAGE: ALERTS ───────────────────────────────────────── -->
+    <!-- ── PAGE: DECISION TRANSPARENCY ────────────────────────────── -->
     <section class="page" id="page-alerts">
       <div class="page-header">
         <div>
-          <h1 class="page-title">Alerts</h1>
-          <p class="page-desc">All fraud alerts with full causal explanations</p>
+          <h1 class="page-title">Decision Transparency</h1>
+          <p class="page-desc">Mathematically auditable causal explanations for topological interventions</p>
         </div>
         <div class="page-actions">
           <select class="select" id="alert-filter" onchange="filterAlerts()">
@@ -206,12 +208,13 @@
                 <th>Verdict</th>
                 <th>Risk Score</th>
                 <th>Latency</th>
-                <th>Accounts</th>
+                <th>Causal Explanation</th>
+                <th>Graph Query (Audit)</th>
                 <th></th>
               </tr>
             </thead>
             <tbody id="alert-table-body">
-              <tr><td colspan="7" class="table-empty">No alerts yet</td></tr>
+              <tr><td colspan="8" class="table-empty">No interventions yet</td></tr>
             </tbody>
           </table>
         </div>
@@ -235,9 +238,9 @@
       </div>
 
       <div class="graph-page-layout">
-        <!-- Graph canvas -->
-        <div class="card card--graph">
-          <canvas id="graph-canvas"></canvas>
+        <!-- D3.js SVG Container -->
+        <div class="card card--graph" id="d3-graph-container">
+          <svg id="d3-graph-svg"></svg>
           <div class="graph-loading" id="graph-loading">
             <div class="spinner"></div>
             <p>Waiting for graph data…</p>
